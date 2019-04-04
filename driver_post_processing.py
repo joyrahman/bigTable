@@ -5,8 +5,10 @@ import pandas as pd
 import numpy as np 
 from collections import defaultdict
 #global vars
-
-filePattern = dict()
+debug = True 
+inputFile = dict()
+inputFile['distribution'] = "locust_distribution.csv"
+inputFile['requests'] = "locust_requests.csv"
 
 #filePattern['vm']="vmfile.csv"
 result = dict()
@@ -16,8 +18,10 @@ result = dict()
 
 
 
+
+
 def get_latency(dir_name):
-    result['frontend'] = 0
+    result['web'] = 0
     result['cart-add'] = 0
     result['cart-cart'] = 0
     result['cart-update'] = 0
@@ -25,7 +29,7 @@ def get_latency(dir_name):
     result['catalogue-categories'] = 0
     result['ratings'] = 0
     result['user'] = 0
-    file_name = os.path.join(dir_name,"locust_distribution.csv")
+    file_name = os.path.join(dir_name,inputFile['distribution'])
     if os.path.isfile(file_name):
         df = pd.read_csv(file_name)
     else:
@@ -43,7 +47,7 @@ def get_latency(dir_name):
             pass
         elif index == 0:
             #print("[debug] first row", row['Name'])
-            result["frontend"] = int(row['95%'])
+            result["web"] = int(row['95%'])
         elif "cart/cart" in row['Name']:
             result["cart-cart"] = int(row['95%']) if int(row['95%']) > result["cart-cart"]  else result["cart-cart"]
         elif "cart/add" in row['Name']:
@@ -63,8 +67,60 @@ def get_latency(dir_name):
 
     return result
 
+'''
+TODO:
+disabled for the time being. depending on the requirements, may be used.
+needs to changed correspoinding to the columns of the inputFile.
+'''
+def get_avg_response_time(dir_name):
+    result['web'] = 0
+    result['cart-add'] = 0
+    result['cart-cart'] = 0
+    result['cart-update'] = 0
+    result['catalogue-product'] = 0
+    result['catalogue-categories'] = 0
+    result['ratings'] = 0
+    result['user'] = 0
+    file_name = os.path.join(dir_name, inputFile['requests'])
+    if os.path.isfile(file_name):
+        df = pd.read_csv(file_name)
+    else:
+        return
 
+    #print(df)
 
+    #"Name","# requests","50%","66%","75%","80%","90%","95%","98%","99%","100%"
+
+    for index, row in df.iterrows():
+
+        #print(row['Name'],int(row['95%']))
+        if row['95%'] == "N/A":
+            pass
+        elif index == 0:
+            #print("[debug] first row", row['Name'])
+            result["web"] = int(row['95%'])
+        elif "cart/cart" in row['Name']:
+            result["cart-cart"] = int(row['95%']) if int(row['95%']
+                                                         ) > result["cart-cart"] else result["cart-cart"]
+        elif "cart/add" in row['Name']:
+            result["cart-add"] = int(row['95%']) if int(row['95%']
+                                                        ) > result["cart-add"] else result["cart-add"]
+        elif "cart/update" in row['Name']:
+              result["cart-update"] = int(row['95%']) if int(
+                  row['95%']) > result["cart-update"] else result["cart-update"]
+        elif "catalogue/categories" in row['Name']:
+            result["catalogue-categories"] = int(row['95%']) if int(
+                row['95%']) > result["catalogue-categories"] else result["catalogue-categories"]
+        elif "catalogue/product" in row['Name']:
+            result["catalogue-product"] = int(row['95%']) if int(
+                row['95%']) > result["catalogue-product"] else result["catalogue-product"]
+        # elif "ratings" in row['Name']:
+        #     result["ratings"]=int(row['95%']) if int(row['95%']) > result["ratings"] else result["ratings"]
+        elif "user/uniqueid" in row['Name']:
+            result["user"] = int(row['95%']) if int(
+                row['95%']) > result["user"] else result["user"]
+
+    return result
 
 
 
@@ -95,11 +151,27 @@ def get_perf_data(dir_name,start_pos,end_pos):
         cpi = (df['cpi'].mean())
         llc = (df['LLC-load-misses'].mean())
         hostname = df.loc[5]['hostname']
-        result[hostname] = [cpi,llc,hostname]
+        result[hostname] = {'cpi':cpi,'llc':llc,'hostname':hostname}
     
     return result
 
 def get_cpu_vm(dir_name):
+    files = [name for name in glob.glob(dir_name+"/*_vmfile.csv")]
+    vm_cpu_avg = dict()
+
+    #go over each files
+    for file in files:
+        with open(os.path.abspath(file), 'r') as f:
+            host_name, val = f.readline().split(':')
+            val = float(val)
+            vm_cpu_avg[host_name] = val
+    
+    return vm_cpu_avg
+
+
+
+
+def get_cpu_vm_by_node(dir_name):
     #read from kb-w{}{}_vmfile.csv
 
     files = [name for name in glob.glob(dir_name+"/*_vmfile.csv")]
@@ -179,10 +251,102 @@ def get_net_container():
     pass
 
 
-def process(dir_name,start_pos,end_pos,output_file):
+def getHorizontalLine():
+    l = 80
+    result = "-"*l
+    return result 
+
+
+def get_average_vm_utilization(vm_cpu, node_list):
+
+    sumCpu = 0
+    count  = 0
+    for node in node_list:
+        sumCpu += vm_cpu.get(node,0)
+        count += 1 if vm_cpu.get(node,0) >0 else 0
+    
+    if count ==0:
+        return 0
+    return sumCpu/count
+
+
+def get_average_perf(perf_data, node_list):
+
+    sumCpi = 0 
+    sumLLC = 0
+    count = 0
+
+    for node in node_list:
+        if node in perf_data.keys():
+            sumCpi += perf_data[node]['cpi']
+            sumLLC += perf_data[node]['llc']
+            count +=1
+    
+    if count==0:
+        return 0
+    sumCpi = sumCpi/count
+    sumLLC = sumLLC/count
+    return [sumCpi,sumLLC]
+
+
+def get_95th_latency(latency, service_name):
+    pass
+
+
+def process(dir_name,start_pos,end_pos,mapping):
+    print(getHorizontalLine())
+    print(mapping)
+
+    print(getHorizontalLine())
     print(get_cpu_vm(dir_name))
+
+
+    print(getHorizontalLine())
     print(get_perf_data(dir_name,start_pos,end_pos))
+
+    print(getHorizontalLine())
     print(get_latency(dir_name))
 
+    # actual aggregation
+    result = {}
+    result['test_id'] = dir_name
+
+
+    latency = get_latency(dir_name)
+    vm_cpu = get_cpu_vm(dir_name)
+    perf_data =  get_perf_data(dir_name,start_pos,end_pos)
+
+
+    for service_name, node_name in mapping.items():
+        if service_name not in result.keys():
+            result[service_name] = {}
+
+        result[service_name]['vm_util'] = get_average_vm_utilization(vm_cpu,node_name)
+        result[service_name]['perf_cpi'] = get_average_perf(perf_data,node_name)[0] #first column cpi
+        result[service_name]['perf_llc'] = get_average_perf(perf_data, node_name)[1] #second column llc
+        if service_name in latency.keys():
+            if service_name == "cart":
+                result['cart-cart'] = {}
+                result['cart-add'] = {}
+                result['cart-update'] = {}
+                result['cart-cart']['95th_latency'] = latency['cart-cart']
+                result['cart-add']['95th_latency'] = latency['cart-cart']
+                result['cart-update']['95th_latency'] = latency['cart-cart']
+            
+            elif service_name == "catalogue":
+                result['catalogue-categories'] = {}
+                result['catalogue-product'] = {}
+                result['catalogue-categories']['95th_latency'] = latency['catalogue-categories']
+                result['catalogue-product']['95th_latency'] = latency['catalogue-product']
+
+
+            else:
+                result[service_name]['95th_latency'] = latency[service_name]
+
+
+
+
+    return result
+
 if __name__ == "__main__":
-    process(dir_name=sys.argv[1],start_pos=int(sys.argv[2]),end_pos=int(sys.argv[3]),output_file=sys.argv[4])
+    process(dir_name=sys.argv[1],start_pos=int(sys.argv[2]),end_pos=int(sys.argv[3]),mapping=sys.argv[4])
