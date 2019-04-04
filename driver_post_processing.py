@@ -294,22 +294,11 @@ def get_95th_latency(latency, service_name):
 
 
 def process(dir_name,start_pos,end_pos,mapping):
-    print(getHorizontalLine())
-    print(mapping)
 
-    print(getHorizontalLine())
-    print(get_cpu_vm(dir_name))
-
-
-    print(getHorizontalLine())
-    print(get_perf_data(dir_name,start_pos,end_pos))
-
-    print(getHorizontalLine())
-    print(get_latency(dir_name))
 
     # actual aggregation
     result = {}
-    result['test_id'] = dir_name
+    #result['test_id'] = dir_name
 
 
     latency = get_latency(dir_name)
@@ -324,29 +313,34 @@ def process(dir_name,start_pos,end_pos,mapping):
         result[service_name]['vm_util'] = get_average_vm_utilization(vm_cpu,node_name)
         result[service_name]['perf_cpi'] = get_average_perf(perf_data,node_name)[0] #first column cpi
         result[service_name]['perf_llc'] = get_average_perf(perf_data, node_name)[1] #second column llc
-        if service_name in latency.keys():
-            if service_name == "cart":
-                result['cart-cart'] = {}
-                result['cart-add'] = {}
-                result['cart-update'] = {}
-                result['cart-cart']['95th_latency'] = latency['cart-cart']
-                result['cart-add']['95th_latency'] = latency['cart-cart']
-                result['cart-update']['95th_latency'] = latency['cart-cart']
-            
-            elif service_name == "catalogue":
-                result['catalogue-categories'] = {}
-                result['catalogue-product'] = {}
-                result['catalogue-categories']['95th_latency'] = latency['catalogue-categories']
-                result['catalogue-product']['95th_latency'] = latency['catalogue-product']
+        
+        if service_name == "cart":
+            #result['cart-cart'] = {}
+            #result['cart-add'] = {}
+            #result['cart-update'] = {}
+            #result['cart-cart']['95th_latency'] = latency['cart-cart']
+            #result['cart-add']['95th_latency'] = latency['cart-add']
+            #result['cart-update']['95th_latency'] = latency['cart-update']
+            result[service_name]['95th_latency'] = latency['cart-add']
+        
+        elif service_name == "catalogue":
+            #result['catalogue-categories'] = {}
+            #result['catalogue-product'] = {}
+            #result['catalogue-categories']['95th_latency'] = latency['catalogue-categories']
+            #result['catalogue-product']['95th_latency'] = latency['catalogue-product']
+            result[service_name]['95th_latency'] = latency['catalogue-product']
+
+        # elif service_name not in latency.keys():
+        #     pass
 
 
-            else:
-                result[service_name]['95th_latency'] = latency[service_name]
+        else:
+            result[service_name]['95th_latency'] = latency.get(service_name,0)
 
 
+    test_id = dir_name.split('/')[-1] #last item
 
-
-    return result
+    return (test_id, result)
 
 if __name__ == "__main__":
     process(dir_name=sys.argv[1],start_pos=int(sys.argv[2]),end_pos=int(sys.argv[3]),mapping=sys.argv[4])

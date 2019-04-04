@@ -59,6 +59,39 @@ def read_container_host_mapping(current_dir, mapFile="container_node_mapping.csv
 import os
 import driver_post_processing 
 
+debug = True 
+
+def write_header(data,output_file):
+    header = []
+    header.append("test_id")
+    data_container = data[1]
+    with open(output_file, 'w') as f:
+        for key in data_container:
+            service = data_container[key]
+            for attrib in service:
+                header.append(key+"_"+attrib)
+        line = ",".join(header)
+        f.write(line)
+
+
+def write_to_csv(data,output_file):
+
+
+    result = []
+    result.append(data[0])
+    data_container = data[1]
+
+    with open(output_file,'a') as f:
+        for key in data_container:
+            service = data_container[key]
+            for attrib in service:
+                result.append(str(service[attrib]))
+        
+        # otherwise write the row
+        line = ",".join(result)
+
+        f.write(line)
+
 
 def remove_hidden(folderName):
     drop_list = set()
@@ -72,7 +105,6 @@ def remove_hidden(folderName):
 # Set the directory you want to start from
 
 def main(current_dir=""):
-    debug = True 
     if not current_dir:
         current_dir = os.getcwd()
     else:
@@ -81,11 +113,10 @@ def main(current_dir=""):
     start_pos = 5
     end_pos = 35
     output_file = "bigtable.csv"
+    output_file = os.path.join(current_dir,output_file)
     mapFile = "container_node_mapping.csv"
 
     mapping = read_container_host_mapping(current_dir, mapFile)
-    if debug:
-        print("[debug] mapping: {}".format(mapping))
 
 
 
@@ -93,15 +124,20 @@ def main(current_dir=""):
         if os.path.isdir(os.path.join(current_dir, item))]
     
     dir_list = filter(remove_hidden,data)
-
+    header_written = False
     for sub_dir in dir_list:
         if debug:
             print("driver_post_process.py {} {} {} {}".format(sub_dir,start_pos,end_pos,output_file))
         #mapping = read_container_host_mapping(sub_dir, mapFile)  #TODO: mapFile shall be local for each directory 
         try:
             result = driver_post_processing.process(sub_dir, start_pos, end_pos, mapping)
-            print(result)
-        except:
+            #print(result)
+            if header_written==False:
+                write_header(result,output_file)
+                header_written=True
+            write_to_csv(result,output_file)
+        except Exception as e:
+            print(e)
             continue
 
 
