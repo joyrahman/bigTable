@@ -9,6 +9,11 @@ debug = True
 inputFile = dict()
 inputFile['distribution'] = "locust_distribution.csv"
 inputFile['requests'] = "locust_requests.csv"
+inputFile['containercpu'] = "container-cpu5sRaw.csv"
+inputFile['containermemW'] = "container-memW5sRaw.csv"
+inputFile['containermemR'] = "container-memR5sRaw.csv"
+inputFile['containernetW'] = "container-netW5sRaw.csv"
+inputFile['containernetR'] = "container-netR5sRaw.csv"
 
 #filePattern['vm']="vmfile.csv"
 result = dict()
@@ -230,25 +235,104 @@ def get_cpu_vm_by_node(dir_name):
     return vm_cpu_avg
 
 
+# returns the key name (deployment name) of the pod based on pod name
+def get_dep_name(depdict, podName):
+    for k in depdict.iterkeys():
+        if k in podName:
+            if debug:
+                print("get_dep_name-| Podname: '{}' matches Service: '{}'".format(podName, k)) #debug
+            return k
 
+# returns avg amount of  cpu util (per 5 seconds) (measured in seconds) per pod type
+def get_container_metrics(dir_name,start_pos,end_pos, inputFileName):
+    iresult = {}
+    iresult['web'] = []
+    iresult['cart'] = []
+    iresult['catalogue'] = []
+    iresult['dispatch'] = []
+    iresult['mongodb'] = []
+    iresult['user'] = []
+    iresult['mysql'] = []
+    iresult['payment'] = []
+    iresult['rabbitmq'] = []
+    iresult['ratings'] = []
+    iresult['redis'] = []
+    iresult['shipping'] = []
+    iresult['stream'] = []
+    file_name = os.path.join(dir_name,inputFileName)
 
+    if debug:
+        print("Collecting avgs for container data file: {}".format(inputFileName))
 
+    if os.path.isfile(file_name):
+        with open(file_name) as f:
+            for i, line in enumerate(f):
+                if i == 0:
+                    continue
+                data = line.strip("\r\n").split(",")
+                pod = get_dep_name(iresult, data[0])
+                iresult[pod].append(get_line_avg(data[1:], start_pos, end_pos))
+    
+        # all avg's collected, create return list    
+        ret = {}
+        for k, v in iresult.iteritems():
+            total = 0
+            cnt = 0
+            for i, val in enumerate(v):
+                if val == "N/A":
+                    continue
+                total += float(val)
+                cnt += 1
 
+            if total == 0:
+                ret[k] = "N/A"
+            else:
+                # return avg of all pod avgs for specific deployment
+                ret[k] =  float(total/cnt)
+        
+        if debug:
+            print("Service avg vals ret: {}".format(ret))
+        return ret
 
+# inputs is a list of string typed floats
+def get_line_avg(inputs, start_i, end_i):
+    last_entry_cnt = 1
+    prev_val = 0
+    diffs = []
+    for i, entry in enumerate(inputs, start_i-1):
+        # passed data section, break
+        if i >= end_i:
+            break
+        # if entry is blank, just iterate num entries since last entry
+        if entry == '':
+            last_entry_cnt += 1
+            continue
+        # if first entry, populate init prev_val & continue
+        entry = float(entry)
+        if prev_val == 0:
+            prev_val = entry
+            last_entry_cnt = 1
+            continue
+        else:
+            # Incase of error where newer entry is less than prev, data is not valid, return N/A
+            if prev_val > entry:
+                if debug:
+                    print("Error in data for processing a pod.")
+                diffs = []
+                break
 
+            elapsed = (entry - prev_val) / last_entry_cnt
+            last_entry_cnt = 1
+            prev_val = entry
+            diffs.append(elapsed)
 
+    if len(diffs) == 0:
+        return "N/A"
+    total = 0.0        
+    for ind ,i in enumerate(diffs):
+        total += i
 
-
-
-
-def get_cpu_container():
-    pass
-
-def get_mem_container():
-    pass
-
-def get_net_container():
-    pass
+    return total / len(diffs)
 
 
 def getHorizontalLine():
@@ -304,6 +388,12 @@ def process(dir_name,start_pos,end_pos,mapping):
     latency = get_latency(dir_name)
     vm_cpu = get_cpu_vm(dir_name)
     perf_data =  get_perf_data(dir_name,start_pos,end_pos)
+    print("Current dirName is: {}".format(dir_name)) #debug
+    container_cpu = get_container_metrics(dir_name, start_pos, end_pos, inputFile["containercpu"])
+    container_memW = get_container_metrics(dir_name, start_pos, end_pos, inputFile["containermemW"])
+    container_memR = get_container_metrics(dir_name, start_pos, end_pos, inputFile["containermemR"])
+    container_netW = get_container_metrics(dir_name, start_pos, end_pos, inputFile["containernetW"])
+    container_netR = get_container_metrics(dir_name, start_pos, end_pos, inputFile["containernetR"])
 
 
     for service_name, node_name in mapping.items():
@@ -313,6 +403,7 @@ def process(dir_name,start_pos,end_pos,mapping):
         result[service_name]['vm_util'] = get_average_vm_utilization(vm_cpu,node_name)
         result[service_name]['perf_cpi'] = get_average_perf(perf_data,node_name)[0] #first column cpi
         result[service_name]['perf_llc'] = get_average_perf(perf_data, node_name)[1] #second column llc
+        # result[service_name]['container_cpu5s_avg'] = container_cpu[service_name]
         
         if service_name == "cart":
             #result['cart-cart'] = {}
@@ -337,10 +428,24 @@ def process(dir_name,start_pos,end_pos,mapping):
         else:
             result[service_name]['95th_latency'] = latency.get(service_name,0)
 
+    for svc_name, node in mapping.items():
+        if svc_name in container_cpu:
+            result[svc_name]['cont_cpu5s_avg'] = container_cpu[svc_name]
+        if svc_name in container_memW:
+            result[svc_name]['cont_memW5s_avg'] = container_memW[svc_name]
+        if svc_name in container_memR:
+            result[svc_name]['cont_memR5s_avg'] = container_memR[svc_name]
+        if svc_name in container_netW:
+            result[svc_name]['cont_netW5s_avg'] = container_netW[svc_name]
+        if svc_name in container_netR:
+            result[svc_name]['cont_netR5s_avg'] = container_netR[svc_name]
+
+        
 
     test_id = dir_name.split('/')[-1] #last item
 
     return (test_id, result)
 
 if __name__ == "__main__":
+
     process(dir_name=sys.argv[1],start_pos=int(sys.argv[2]),end_pos=int(sys.argv[3]),mapping=sys.argv[4])
