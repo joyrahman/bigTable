@@ -152,6 +152,9 @@ def get_perf_data(dir_name,start_pos,end_pos):
     for file in files:
         df = pd.read_csv(file)
         df = df.loc[start_pos:end_pos+1]
+        df = df[df['cycle']!="<not counted>"]
+        df = df[df['instructions']!="<not counted>"]
+        df = df[df['LLC-load-misses']!="<not counted>"]
         df['cpi'] = df['cycle']/df['instructions']
         cpi = (df['cpi'].mean())
         llc = (df['LLC-load-misses'].mean())
