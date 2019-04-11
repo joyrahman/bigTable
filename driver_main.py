@@ -71,6 +71,7 @@ def write_header(data,output_file):
             for attrib in service:
                 header.append(key+"_"+attrib)
         line = ",".join(header)
+        line += '\n' # add new line
         f.write(line)
 
 
@@ -89,7 +90,7 @@ def write_to_csv(data,output_file):
         
         # otherwise write the row
         line = ",".join(result)
-
+        line += '\n' # add new line
         f.write(line)
 
 
