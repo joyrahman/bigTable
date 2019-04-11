@@ -155,7 +155,9 @@ def get_perf_data(dir_name,start_pos,end_pos):
         df = df[df['cycle']!="<not counted>"]
         df = df[df['instructions']!="<not counted>"]
         df = df[df['LLC-load-misses']!="<not counted>"]
-        df['cpi'] = df['cycle']/df['instructions']
+        df.cycle = pd.to_numeric(df.cycle, errors='coerce')
+        df.instructions = pd.to_numeric(df.instructions, errors='coerce')
+        df['cpi'] = (df['cycle'])/(df['instructions'])
         cpi = (df['cpi'].mean())
         llc = (df['LLC-load-misses'].mean())
         hostname = df.loc[5]['hostname']
